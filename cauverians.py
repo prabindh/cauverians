@@ -1,8 +1,6 @@
 """
-Python utility for machine learning using only numpy
-https://github.com/prabindh/cauverians
-status: Does not work properly
-(c) prabindh 2020
+Utilities for performing regression using a neural network
+Using only numpy
 """
 import autograd.numpy as np
 from autograd import grad
@@ -84,7 +82,7 @@ class cauverians():
         nn = []
         # set network configuration
         if self.config.NN_RUN_MODE == "line":
-            nn.append({"layername": "input", "input_dim": input_dim, \
+            nn.append({"layername": "in", "input_dim": input_dim, \
                 "output_dim": 1, "activation": "identity"})
         else:
             final_activation = "relu"
@@ -338,12 +336,15 @@ class cauverians():
         return X,X_normalize_state, x_mapping_state, Y, Y_normalize_state
 
 
-    def print_model(self, nn_architecture, params):
-        print ("Layer (name)\tInput_dim\tOutput_dim")
+    def print_model(self):
+        nn_architecture = self.nn_architecture
+        params = self.params_values
+        print ("Layer (name)\tInput_dim\tOutput_dim\tW shape")
         for idx, layer in enumerate(nn_architecture):
-            print("{}\t{}\t{}".format(layer["layername"],
+            print("{}\t{}\t{}\t{}".format(layer["layername"],
                         layer["input_dim"],
-                        layer["output_dim"]))
+                        layer["output_dim"], params['W' + str(idx+1)].shape))
+
 
     def denormalize0(self, data, normalize_state):
         mean = normalize_state["mean"]
@@ -427,10 +428,11 @@ class cauverians():
 
     def sigmoid_backward(self, dA, Z):
         sig = sigmoid(Z)
-        return dA * sig * (1 - sig)
+        return dA @ sig @ (1 - sig)
 
     def relu_backward(self, dA, Z):
         dZ = np.array(dA, copy = True)
+        dZ[Z > 0] = 1
         dZ[Z <= 0] = 0
         return dZ
     def leaky_relu(self, Z):
@@ -496,6 +498,9 @@ class cauverians():
             # calculation of activation for the current layer
             A_curr, Z_curr = self.evaluate_single_layer(A_prev, W_curr, b_curr, activ_function_curr)
 
+            if (self.config.NN_DEBUG_SHAPES):
+                print ("Forward: layer / A_curr/Z_curr shapes:", layer_idx, A_curr.shape, Z_curr.shape)
+
             # saving calculated values in the memory
             memory["A" + str(idx)] = A_prev
             memory["Z" + str(layer_idx)] = Z_curr
@@ -518,8 +523,8 @@ class cauverians():
 
     def evaluate_grad_mse(self, X, Y_hat, Y):
         # Computes gradients for both "a" and "b" parameters
-        error = (Y_hat - Y)*X
-        a_grad = error.mean()
+        error = (Y_hat - Y).T @ X
+        a_grad = error / X.shape[0]
         return a_grad
 
 
@@ -541,8 +546,8 @@ class cauverians():
                 cost = self.evaluate_mse(Y_hat, Y)
             else:
                 # Calculation of non-normalised first derivative
-                # grad_mse = grad(self.evaluate_mse)
-                # derivative_cost = (-1) * grad_mse(Y_hat, Y)
+                #grad_mse = grad(self.evaluate_mse)
+                #derivative_cost = (-1) * grad_mse(Y_hat, Y)
                 derivative_cost = (-1) * self.evaluate_grad_mse(X, Y_hat, Y)
         elif (method is "root_mean_sq_log_error"):
             if (derivative is None):
@@ -631,7 +636,7 @@ class cauverians():
         # derivative of the vector b
         db_curr = np.sum(dZ_curr, keepdims=True) / m
         if (self.config.NN_DEBUG_SHAPES):
-            print ("W_curr/dW_curr, b_curr/db_curr shape:", W_curr.shape, \
+            print ("Back: W_curr/dW_curr, b_curr/db_curr shape:", W_curr.shape, \
                     dW_curr.shape, b_curr.shape, db_curr.shape)
         # derivative of the matrix A_prev
         dA_prev = np.dot(dZ_curr, W_curr.T)
@@ -664,7 +669,7 @@ class cauverians():
             b_curr = self.params_values["b" + str(layer_idx_curr)]
 
             if (self.config.NN_DEBUG_SHAPES):
-                print ("shape dA/W/b/Z/A_prev = ",dA_curr.shape, W_curr.shape, \
+                print ("Back: shape dA/W/b/Z/A_prev = ",dA_curr.shape, W_curr.shape, \
                             b_curr.shape, Z_curr.shape, A_prev.shape)
 
             dA_prev, dW_curr, db_curr = self.single_layer_backward_propagation(
@@ -699,6 +704,8 @@ class cauverians():
         train_state = {}
         merged = np.append(X,Y, axis=1)
 
+        if (self.config.NN_DEBUG_SHAPES):
+            print ("X/Y input shape = ", X.shape, Y.shape)
         # performing calculations for subsequent iterations
         for i in range(self.config.NN_EPOCHS):
             self.g_curr_epochs = i
@@ -717,7 +724,8 @@ class cauverians():
                 X_batch = X_batch[:-delete_n, :]
                 Y_batch = Y_batch[:-delete_n, :]
             Y_hat, cache = self.evaluate_model(X_batch)
-
+            if (self.config.NN_DEBUG_SHAPES):
+                print ("Y_hat shape = ", Y_hat.shape)
             cost, _ = self.evaluate_cost_value(X_batch, Y_hat, Y_batch, self.config.NN_ARCHITECTURE_LOSS_TYPE) # Kaggle measured logloss
             rms_error, _ = self.evaluate_cost_value(X_batch, Y_hat, Y_batch, "root_mean_sq_error")
 
@@ -740,7 +748,7 @@ class cauverians():
                 break
             if self.g_exit_signalled > 0:
                 break
-        self.print_model(self.nn_architecture, self.params_values)
+        self.print_model()
         return self.params_values
 
     def save_params(self, filename):
