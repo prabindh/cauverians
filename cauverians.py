@@ -118,8 +118,7 @@ class cauverians():
         X = np.array([3.3,4.4,5.5,6.71,6.93,4.168,9.779,6.182,7.59,2.167,
               7.042,10.791,5.313,7.997,5.654,9.27,3.1])
         X = np.reshape(X, (X.shape[0],1))
-        Y = np.array([1.7,2.76,2.09,3.19,1.694,1.573,3.366,2.596,2.53,1.221,
-              2.827,3.465,1.65,2.904,2.42,2.94,1.3])
+        Y = 2.0 * X
         Y = np.reshape(Y, (Y.shape[0],1))
         # Normalize
         Y_normalize_state = X_normalize_state = None
@@ -135,38 +134,7 @@ class cauverians():
         return X, None, None, Y, None
 
     def multi_encode_text_variables(self, column_name, data, vals):
-        # get list of all values
-        extra_col_id = 0
-        found_column = -1
-        new_data = np.array(data, copy = True)
-        for col in range(data.shape[1]):
-            if data[0][col] == column_name:
-                found_column = col
-                for row in range(1, data.shape[0]):
-                    if data[row][col] not in vals:
-                        vals[data[row][col]] = col
-                break
-        if found_column == -1:
-            return new_data
-        shift_count = 0
-        for name in vals:
-            new_col = np.zeros((data.shape[0], 1))
-            for row in range(data.shape[0]):
-                if data[row][found_column] == name:
-                    new_col[row][0] = 1
-            # append new col to start
-            # new_data = np.hstack((new_col, new_data))
-            new_data = np.hstack((new_data[:,:1], new_col, new_data[:,1:]))
-            shift_count = shift_count + 1
-        # delete name
-        new_data = np.delete(new_data, found_column + shift_count, axis=1)
-
-        if self.config.NN_DEBUG_SHAPES:
-            print (new_data[0][new_data.shape[1]-1], len(vals), new_data.shape[1], data.shape[1])
-        assert(len(vals) == new_data.shape[1]-data.shape[1]+1)
-        if ("SalePrice" != new_data[0][new_data.shape[1]-1]):
-            print ("Warn: last col = ", new_data[0][new_data.shape[1]-1])
-        return new_data, vals
+        return None, None
 
     def augment_training_data(self, data, target_name=None):
         recent_remodel = np.zeros((data.shape[0], 1))
@@ -206,134 +174,10 @@ class cauverians():
         return return_data
 
     def filter_training_data(self, data, target_name = None):
-        """
-        Remove MiscVal (no relation observed, most vals are zero), 3SsnPorch, ScreenPorch, PoolArea (almost all 0),
-        Eliminate all sales except for the “normal” from the SALES CONDITION variable (SaleCondition)
-        Remove all homes with a living area (GR LIVE AREA) above 1500 square feet (GrLivArea)
-        """
-        X = np.array(data, copy = True)
-        to_delete = []
-        # Delete unwanted cols, and SaleCondition (normal only prevails)
-        del_map = [] #"MiscVal", "3SsnPorch", "ScreenPorch", "SaleCondition"]
-        for delete_target in del_map:
-            for col in range(X.shape[1]):
-                if (X[0][col] == delete_target):
-                    to_delete.append(col)
-        X = np.delete(X, to_delete, 1)
-        # remove rows only for training set (target_name not None)
-        if target_name is not None:
-            to_delete = []
-            for col in range(X.shape[1]):
-                if (X[0][col] == "GrLivArea"):
-                    for row in range(1,X.shape[0]):
-                        if ((X[row][col].astype(float) > 3000) or (X[row][col].astype(float) < 500)):
-                            to_delete.append(row)
-                    break
-            for col in range(X.shape[1]):
-                if (X[0][col] == "SalePrice"):
-                    for row in range(1,X.shape[0]):
-                        if ((X[row][col].astype(float) > 450000) or (X[row][col].astype(float) < 50000)):
-                            to_delete.append(row)
-                    break
-            for col in range(X.shape[1]):
-                if (X[0][col] == "LotArea"):
-                    for row in range(1,X.shape[0]):
-                        if X[row][col].astype(float) > 30000:
-                            to_delete.append(row)
-                    break
-            for col in range(X.shape[1]):
-                if (X[0][col] == "YearBuilt"):
-                    for row in range(1,X.shape[0]):
-                        if X[row][col].astype(float) < 1900:
-                            to_delete.append(row)
-                    break
-            X = np.delete(X, to_delete, 0)
-
-        if (self.config.NN_DEBUG_SHAPES):
-            print ("filter_training:",  X.shape)
-
-        return X
+        return None
 
     def read_housing_csv_2(self, file_name, x_mapping_state, target_name=None):
-        skip_header = 1
-        if self.config.NN_MULTI_ENCODE_TEXT_VARS or self.config.NN_APPLY_DATA_SCIENCE:
-            skip_header = 0
-        data = np.genfromtxt(file_name,
-                delimiter=',', dtype='unicode', skip_header=skip_header)
-        if (self.config.NN_DEBUG_SHAPES):
-            print (data.shape)
-        if (target_name is None):
-            skip_cols = 1
-        else:
-            skip_cols = 2
-
-        # Identify Area columns
-        area_cols = [i for i,item in enumerate(data[0,:]) if "Area" in item]
-
-        # multi-encode
-        if self.config.NN_MULTI_ENCODE_TEXT_VARS:
-            X_data, self.neighborhood_vals = multi_encode_text_variables("Neighborhood", data, self.neighborhood_vals)
-            X_data = np.delete(X_data, 0, axis=0) # Remove header now
-            data = X_data
-        if self.config.NN_APPLY_DATA_SCIENCE:
-            # Apply some data science
-            data = self.filter_training_data(data, target_name = target_name)
-            X_data = self.augment_training_data(data, target_name = target_name)
-            X_data = np.delete(X_data, 0, axis=0) # Remove header now
-            data = X_data
-        # Get (samplesize x features per sample)
-        X = np.empty((data.shape[0],data.shape[1]-skip_cols)) # Dont need Id and Price columns
-        for col in range(data.shape[1]-skip_cols):
-            map_id = 1.0 # reset every feature
-            if (target_name is not None):
-                mapping_state = {}
-            else:
-                mapping_state = x_mapping_state[col]
-            if col in area_cols:
-                # Direct mapping
-                for row in range(data.shape[0]):
-                    try:
-                        X[row][col] = data[row][col+1].astype(float)
-                    except:
-                        if (data[row][col+1] in mapping_state):
-                            X[row][col] = mapping_state[data[row][col+1]]
-                        else:
-                            mapping_state[data[row][col+1]] = map_id
-                            X[row][col] = map_id
-                            map_id = map_id + 1.0
-            else:
-                for row in range(data.shape[0]):
-                    if (data[row][col+1] in mapping_state):
-                        X[row][col] = mapping_state[data[row][col+1]]
-                    else:
-                        mapping_state[data[row][col+1]] = map_id
-                        X[row][col] = map_id
-                        map_id = map_id + 1.0
-            x_mapping_state.append(mapping_state)
-        # Get groundtruths
-        Y = np.empty((data.shape[0],1))
-        if (target_name is not None):
-            prev = 0.0
-            for row in range(data.shape[0]):
-                col = data.shape[1]-1
-                try:
-                    Y[row][0] = data[row][col].astype(float)
-                except:
-                    raise Exception ("Ground truth should be float")
-                # Ensure GT was sorted before
-                # assert (prev <= Y[row][0])
-                prev = Y[row][0]
-                if self.config.NN_LOG_TARGET is True:
-                    Y[row][0] = np.log(Y[row][0])
-        # Normalize
-        Y_normalize_state = X_normalize_state = None
-        if (self.config.NN_NORMALIZE):
-            if (target_name is not None):
-                Y, Y_normalize_state = self.normalize0(Y, axis=0)
-            X, X_normalize_state = self.normalize0(X, axis=0)
-        if (self.config.NN_DEBUG_SHAPES):
-            print (X.shape, Y.shape, X, X[0][0].dtype)
-        return X,X_normalize_state, x_mapping_state, Y, Y_normalize_state
+        return None, None, None, None, None
 
 
     def print_model(self):
@@ -398,7 +242,8 @@ class cauverians():
 
             # initiating the values of the W matrix
             # and vector b for subsequent layers
-            Wrand1 = np.random.randn(layer_input_size, layer_output_size)
+            # Wrand1 = np.random.randn(layer_input_size, layer_output_size)
+            Wrand1 = np.ones((layer_input_size, layer_output_size))
 
             # Unused section
             """
@@ -445,7 +290,7 @@ class cauverians():
     def activation_identity(self, Z):
         return Z
     def activation_identity_backward(self, dA, Z):
-        return Z
+        return dA
 
     def make_dropout(self, input, bound):
         rand_val = int(np.random.rand() * input.shape[1]* bound)
@@ -458,7 +303,10 @@ class cauverians():
         # calculation of the input value for the activation function
         #  Z = A*W + b
         #    Then Activation is applied A = activate(Z), to get Input to next layer
-        Z_curr = np.dot(A_prev, W_curr) + b_curr
+
+
+        #Z_curr = np.dot(A_prev, W_curr) + b_curr
+        Z_curr = np.dot(A_prev, W_curr)
 
         # selection of activation function
         if activation is "relu":
@@ -517,15 +365,13 @@ class cauverians():
     def evaluate_rmse(self, Y_hat, Y):
         rmse = - np.sqrt(((Y_hat - Y) ** 2).mean())
         return rmse
-    def evaluate_mse(self, Y_hat, Y):
-        mse = - ((Y_hat - Y) ** 2).mean() / 2
+    def evaluate_mse(self, loss):
+        mse = - np.mean(loss ** 2) / 2
         return mse
 
-    def evaluate_grad_mse(self, X, Y_hat, Y):
-        # Computes gradients for both "a" and "b" parameters
-        error = (Y_hat - Y).T @ X
-        a_grad = error / X.shape[0]
-        return a_grad
+    def evaluate_grad_mse_y_hat(self, loss):
+        gradient = loss
+        return gradient
 
 
     def evaluate_cost_value(self, X, Y_hat, Y, method, derivative=None):
@@ -542,13 +388,14 @@ class cauverians():
                 # Calculation of first derivative
                 derivative_cost = - (np.divide(Y, Y_hat) - np.divide(1 - Y, 1 - Y_hat))
         elif (method is "mean_sq_error"):
+            loss = (Y_hat - Y)
             if (derivative is None):
-                cost = self.evaluate_mse(Y_hat, Y)
+                cost = self.evaluate_mse(loss)
             else:
                 # Calculation of non-normalised first derivative
                 #grad_mse = grad(self.evaluate_mse)
-                #derivative_cost = (-1) * grad_mse(Y_hat, Y)
-                derivative_cost = (-1) * self.evaluate_grad_mse(X, Y_hat, Y)
+                #derivative_cost = (-1) * grad_mse(loss)
+                derivative_cost = self.evaluate_grad_mse_y_hat(loss)
         elif (method is "root_mean_sq_log_error"):
             if (derivative is None):
                 # Calculation of rmsle
@@ -605,7 +452,8 @@ class cauverians():
             acc = (Y_hat_ == Y).all(axis=0).mean()
         else:
             if self.config.NN_RUN_MODE == "line":
-                acc = self.evaluate_mse(Y_hat, Y)
+                loss = Y_hat - Y
+                acc = self.evaluate_mse(loss)
             else:
                 acc = self.evaluate_rmsle(Y_hat, Y)
             # If already kaggle Y is in log, so just use rmse
