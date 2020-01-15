@@ -320,7 +320,8 @@ class cauverians():
         return mse
 
     def evaluate_grad_mse_y_hat(self, loss):
-        gradient = loss
+        m = loss.shape[0]
+        gradient = loss / m
         return gradient
 
 
