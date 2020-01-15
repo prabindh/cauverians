@@ -14,7 +14,6 @@ import autograd.numpy as np
 import math, random, time
 import sys, signal
 from cauverians import cauverians as cauverians
-from cauverians import LinearRegression as linear_regression_npy
 
 class create_config():
     def __init__(self):
@@ -81,14 +80,6 @@ if(config.NN_RUN_MODE == "kaggle_home"):
 else:
     X_train, X_train_normalize_state, _, Y_train, Y_train_normalize_state = cauvery.generate_line()
     X_test, X_test_normalize_state, _, Y_test, Y_test_normalize_state = cauvery.generate_line()
-
-lrn = linear_regression_npy(X_train, Y_train)
-lrn.fit()
-score = lrn.score()
-#print ("score=", score)
-#pred = lrn.predict(X_test)
-#print ("predicted=", pred)
-#print ("params=", lrn.get_params())
 
 # Training
 input_size = X_train.shape[1]
