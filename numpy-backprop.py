@@ -13,7 +13,7 @@
 import autograd.numpy as np
 import math, random, time
 import sys, signal
-from cauverians import cauverians as cauverians
+from cauverians import cauverians, utils
 
 class create_config():
     def __init__(self):
@@ -70,7 +70,8 @@ class create_config():
 # Use cauvery to perform regression
 ###############################################################
 config = create_config()
-cauvery = cauverians(config)
+cauvery_utils = utils(config)
+cauvery = cauverians(config, cauvery_utils)
 if(config.NN_RUN_MODE == "kaggle_home"):
     X_mapping = []  # Same mapping to be used in train/test !!
     X_train,X_train_normalize_state, X_mapping, Y_train, Y_train_normalize_state = \
@@ -78,13 +79,14 @@ if(config.NN_RUN_MODE == "kaggle_home"):
     X_test, X_test_normalize_state, X_mapping, Y_test, _ = \
         cauvery.read_housing_csv_2("kaggle-housing-price/test.csv", X_mapping)
 else:
-    X_train, X_train_normalize_state, _, Y_train, Y_train_normalize_state = cauvery.generate_line()
-    X_test, X_test_normalize_state, _, Y_test, Y_test_normalize_state = cauvery.generate_line()
+    X_train, X_train_normalize_state, _, Y_train, Y_train_normalize_state = cauvery_utils.generate_line()
+    X_test, X_test_normalize_state, _, Y_test, Y_test_normalize_state = cauvery_utils.generate_line()
 
 # Training
 input_size = X_train.shape[1]
 arch = cauvery.make_network_arch(input_size)
-cauvery.print_model()
+params = cauvery.get_params()
+cauvery_utils.print_model(arch, params)
 params_values = cauvery.train_model(X_train, Y_train)
 
 # Prediction
