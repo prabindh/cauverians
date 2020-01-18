@@ -9,63 +9,21 @@ from sklearn.model_selection import train_test_split
 import sys, signal
 import pickle
 
-class cauverians():
+class utils():
     def __init__(self, in_config):
         np.seterr(all='raise')
-        self.g_curr_epochs = 0
+        self.config = in_config
         self.g_exit_signalled = 0
         signal.signal(signal.SIGINT, self.signal_handler)
-        self.config = in_config
-        self.neighborhood_vals = {}
-        self.g_contiguous_high_acc_epochs = 0
-        self.g_highest_acc_state = {"acc": 0.0, "epoch": 1}
-        self.nn_architecture = None
-        self.params_values = None
-        print ("Initialised cauverians")
-        return
+
     def signal_handler(self, sig, frame):
-            print('Setting exit flag...')
-            self.g_exit_signalled = self.g_exit_signalled + 1
-            if self.g_exit_signalled > 5:
-                sys.exit(0)
-    def make_network_arch(self, input_dim):
-        if (input_dim % 2):
-            print ("WARN: Number of features not multiple, ", input_dim)
-        nn = []
-        # set network configuration
-        if self.config.NN_RUN_MODE == "line":
-            nn.append({"layername": "in", "input_dim": input_dim, \
-                "output_dim": 1, "activation": "identity"})
-        else:
-            final_activation = "relu"
-            if self.config.NN_TYPE == "classifier":
-                final_activation = "sigmoid"
-
-            start_dim = input_dim*self.config.NN_INPUT_TO_HIDDEN_MULTIPLIER
-            nn.append({"layername": "input", "input_dim": input_dim, \
-                    "output_dim": int(start_dim), "activation": "relu"})
-            if (self.config.NN_SHAPE == "wide"):
-                for id in range(1000):
-                    if (start_dim <= 60): break
-                    div_factor = 2
-                    nn.append({"layername": "hidden"+str(id+1), "input_dim": int(start_dim), \
-                            "output_dim": int(start_dim/div_factor), "activation": "relu"})
-                    start_dim = start_dim / div_factor
-                nn.append({"layername": "output", "input_dim": int(start_dim), "output_dim": 1, \
-                        "activation": final_activation})
-            elif (self.config.NN_SHAPE == "long"): # long (from left to right)
-                for id in range(4):
-                    nn.append({"layername": "hidden-wide"+str(id+1), "input_dim": int(start_dim), \
-                            "output_dim": int(start_dim), "activation": "relu"})
-                nn.append({"layername": "output", "input_dim": int(start_dim), "output_dim": 1, \
-                        "activation": final_activation})
-            else:
-                raise Exception("Unknown network_shape ", self.config.NN_SHAPE)
-
-        self.nn_architecture = nn
-        self.params_values = self.init_layers(2)
-        return nn
-
+        print('Setting exit flag...')
+        self.g_exit_signalled = self.g_exit_signalled + 1
+        if self.g_exit_signalled > 5:
+            print ("Exiting due to signal")
+            sys.exit(0)
+    def get_exit_signal_count(self):
+        return self.g_exit_signalled
     def generate_line(self):
         X = np.array([3.3,4.4,5.5,6.71,6.93,4.168,9.779,6.182,7.59,2.167,
               7.042,10.791,5.313,7.997,5.654,9.27,3.1])
@@ -85,8 +43,95 @@ class cauverians():
             print (X.shape, Y.shape)
         return X, None, None, Y, None
 
+    def print_model(self, nn_architecture, params):
+        print ("Layer (name)\tInput_dim\tOutput_dim\tW shape")
+        for idx, layer in enumerate(nn_architecture):
+            print("{}\t{}\t{}\t{}".format(layer["layername"],
+                        layer["input_dim"],
+                        layer["output_dim"], params['W' + str(idx+1)].shape))
+
+
+    def denormalize0(self, data, normalize_state):
+        mean = normalize_state["mean"]
+        var = normalize_state["var"]
+        minimum = normalize_state["min"]
+        maximum = normalize_state["max"]
+        stdn = normalize_state["stdn"]
+        if (self.config.NN_ZERO_MEAN_NORMALIZE == True):
+            denorm = (stdn * data) + mean
+        else:
+            denorm = data * (maximum - minimum) + minimum
+        return denorm
+    # normalize based on each feature separately
+    def normalize0(self, data, axis=0):
+
+        assert (np.isfinite(data).all() == True)
+
+        mean = np.mean(data, axis=axis)
+        var = np.var(data, axis=axis)
+        stdn = np.std(data, axis=axis)
+        minimum_arr = np.amin(data, axis=axis, keepdims=True)
+        maximum_arr = np.amax(data, axis=axis, keepdims=True)
+        normalize_state = {"mean": mean, "var":var, "min": minimum_arr, "max": maximum_arr, "stdn": stdn}
+
+        if (self.config.NN_ZERO_MEAN_NORMALIZE == True):
+            normalized = (data - mean) / (stdn + 0.00001)
+        else:
+            normalized = (data - minimum_arr) / (maximum_arr - minimum_arr + 0.0001)
+
+        return normalized.reshape(data.shape), normalize_state
+
+    def save_params(self, filename):
+        pklfile = open(filename, 'wb')
+        pickle.dump(self.params_values, pklfile)
+        pklfile.close()
+        print ("Model output and Parameters saved")
+
+class kaggle_housing():
+    def __init__(self, in_config):
+        np.seterr(all='raise')
+        self.g_curr_epochs = 0
+        self.config = in_config
+    def save_kaggle(self, predictions, filename):
+        Id = np.empty([2919-1461+1,1], dtype=int)
+        for x in range(2919-1461+1):
+            Id[x][0] = x + 1461
+        predictions = np.append(Id, predictions,1)
+        np.savetxt(filename,predictions, fmt="%d,%d", delimiter=",")
+
     def multi_encode_text_variables(self, column_name, data, vals):
-        return None, None
+        # get list of all values
+        extra_col_id = 0
+        found_column = -1
+        new_data = np.array(data, copy = True)
+        for col in range(data.shape[1]):
+            if data[0][col] == column_name:
+                found_column = col
+                for row in range(1, data.shape[0]):
+                    if data[row][col] not in vals:
+                        vals[data[row][col]] = col
+                break
+        if found_column == -1:
+            return new_data
+        shift_count = 0
+        for name in vals:
+            new_col = np.zeros((data.shape[0], 1))
+            for row in range(data.shape[0]):
+                if data[row][found_column] == name:
+                    new_col[row][0] = 1
+            # append new col to start
+            # new_data = np.hstack((new_col, new_data))
+            new_data = np.hstack((new_data[:,:1], new_col, new_data[:,1:]))
+            shift_count = shift_count + 1
+        # delete name
+        new_data = np.delete(new_data, found_column + shift_count, axis=1)
+
+        if self.config.NN_DEBUG_SHAPES:
+            print (new_data[0][new_data.shape[1]-1], len(vals), new_data.shape[1], data.shape[1])
+        assert(len(vals) == new_data.shape[1]-data.shape[1]+1)
+        if ("SalePrice" != new_data[0][new_data.shape[1]-1]):
+            print ("Warn: last col = ", new_data[0][new_data.shape[1]-1])
+        return new_data, vals
 
     def augment_training_data(self, data, target_name=None):
         recent_remodel = np.zeros((data.shape[0], 1))
@@ -126,51 +171,185 @@ class cauverians():
         return return_data
 
     def filter_training_data(self, data, target_name = None):
-        return None
+        """
+        Remove MiscVal (no relation observed, most vals are zero), 3SsnPorch, ScreenPorch, PoolArea (almost all 0),
+        Eliminate all sales except for the “normal” from the SALES CONDITION variable (SaleCondition)
+        Remove all homes with a living area (GR LIVE AREA) above 1500 square feet (GrLivArea)
+        """
+        X = np.array(data, copy = True)
+        to_delete = []
+        # Delete unwanted cols, and SaleCondition (normal only prevails)
+        del_map = [] #"MiscVal", "3SsnPorch", "ScreenPorch", "SaleCondition"]
+        for delete_target in del_map:
+            for col in range(X.shape[1]):
+                if (X[0][col] == delete_target):
+                    to_delete.append(col)
+        X = np.delete(X, to_delete, 1)
+        # remove rows only for training set (target_name not None)
+        if target_name is not None:
+            to_delete = []
+            for col in range(X.shape[1]):
+                if (X[0][col] == "GrLivArea"):
+                    for row in range(1,X.shape[0]):
+                        if ((X[row][col].astype(float) > 3000) or (X[row][col].astype(float) < 500)):
+                            to_delete.append(row)
+                    break
+            for col in range(X.shape[1]):
+                if (X[0][col] == "SalePrice"):
+                    for row in range(1,X.shape[0]):
+                        if ((X[row][col].astype(float) > 450000) or (X[row][col].astype(float) < 50000)):
+                            to_delete.append(row)
+                    break
+            for col in range(X.shape[1]):
+                if (X[0][col] == "LotArea"):
+                    for row in range(1,X.shape[0]):
+                        if X[row][col].astype(float) > 30000:
+                            to_delete.append(row)
+                    break
+            for col in range(X.shape[1]):
+                if (X[0][col] == "YearBuilt"):
+                    for row in range(1,X.shape[0]):
+                        if X[row][col].astype(float) < 1900:
+                            to_delete.append(row)
+                    break
+            X = np.delete(X, to_delete, 0)
+
+        if (self.config.NN_DEBUG_SHAPES):
+            print ("filter_training:",  X.shape)
+
+        return X
 
     def read_housing_csv_2(self, file_name, x_mapping_state, target_name=None):
-        return None, None, None, None, None
-
-
-    def print_model(self):
-        nn_architecture = self.nn_architecture
-        params = self.params_values
-        print ("Layer (name)\tInput_dim\tOutput_dim\tW shape")
-        for idx, layer in enumerate(nn_architecture):
-            print("{}\t{}\t{}\t{}".format(layer["layername"],
-                        layer["input_dim"],
-                        layer["output_dim"], params['W' + str(idx+1)].shape))
-
-
-    def denormalize0(self, data, normalize_state):
-        mean = normalize_state["mean"]
-        var = normalize_state["var"]
-        minimum = normalize_state["min"]
-        maximum = normalize_state["max"]
-        stdn = normalize_state["stdn"]
-        if (self.config.NN_ZERO_MEAN_NORMALIZE == True):
-            denorm = (stdn * data) + mean
+        skip_header = 1
+        if self.config.NN_MULTI_ENCODE_TEXT_VARS or self.config.NN_APPLY_DATA_SCIENCE:
+            skip_header = 0
+        data = np.genfromtxt(file_name,
+                delimiter=',', dtype='unicode', skip_header=skip_header)
+        if (self.config.NN_DEBUG_SHAPES):
+            print (data.shape)
+        if (target_name is None):
+            skip_cols = 1
         else:
-            denorm = data * (maximum - minimum) + minimum
-        return denorm
-    # normalize based on each feature separately
-    def normalize0(self, data, axis=0):
+            skip_cols = 2
 
-        assert (np.isfinite(data).all() == True)
+        # Identify Area columns
+        area_cols = [i for i,item in enumerate(data[0,:]) if "Area" in item]
 
-        mean = np.mean(data, axis=axis)
-        var = np.var(data, axis=axis)
-        stdn = np.std(data, axis=axis)
-        minimum_arr = np.amin(data, axis=axis, keepdims=True)
-        maximum_arr = np.amax(data, axis=axis, keepdims=True)
-        normalize_state = {"mean": mean, "var":var, "min": minimum_arr, "max": maximum_arr, "stdn": stdn}
+        # multi-encode
+        if self.config.NN_MULTI_ENCODE_TEXT_VARS:
+            X_data, self.neighborhood_vals = multi_encode_text_variables("Neighborhood", data, self.neighborhood_vals)
+            X_data = np.delete(X_data, 0, axis=0) # Remove header now
+            data = X_data
+        if self.config.NN_APPLY_DATA_SCIENCE:
+            # Apply some data science
+            data = self.filter_training_data(data, target_name = target_name)
+            X_data = self.augment_training_data(data, target_name = target_name)
+            X_data = np.delete(X_data, 0, axis=0) # Remove header now
+            data = X_data
+        # Get (samplesize x features per sample)
+        X = np.empty((data.shape[0],data.shape[1]-skip_cols)) # Dont need Id and Price columns
+        for col in range(data.shape[1]-skip_cols):
+            map_id = 1.0 # reset every feature
+            if (target_name is not None):
+                mapping_state = {}
+            else:
+                mapping_state = x_mapping_state[col]
+            if col in area_cols:
+                # Direct mapping
+                for row in range(data.shape[0]):
+                    try:
+                        X[row][col] = data[row][col+1].astype(float)
+                    except:
+                        if (data[row][col+1] in mapping_state):
+                            X[row][col] = mapping_state[data[row][col+1]]
+                        else:
+                            mapping_state[data[row][col+1]] = map_id
+                            X[row][col] = map_id
+                            map_id = map_id + 1.0
+            else:
+                for row in range(data.shape[0]):
+                    if (data[row][col+1] in mapping_state):
+                        X[row][col] = mapping_state[data[row][col+1]]
+                    else:
+                        mapping_state[data[row][col+1]] = map_id
+                        X[row][col] = map_id
+                        map_id = map_id + 1.0
+            x_mapping_state.append(mapping_state)
+        # Get groundtruths
+        Y = np.empty((data.shape[0],1))
+        if (target_name is not None):
+            prev = 0.0
+            for row in range(data.shape[0]):
+                col = data.shape[1]-1
+                try:
+                    Y[row][0] = data[row][col].astype(float)
+                except:
+                    raise Exception ("Ground truth should be float")
+                # Ensure GT was sorted before
+                # assert (prev <= Y[row][0])
+                prev = Y[row][0]
+                if self.config.NN_LOG_TARGET is True:
+                    Y[row][0] = np.log(Y[row][0])
+        # Normalize
+        Y_normalize_state = X_normalize_state = None
+        if (self.config.NN_NORMALIZE):
+            if (target_name is not None):
+                Y, Y_normalize_state = self.normalize0(Y, axis=0)
+            X, X_normalize_state = self.normalize0(X, axis=0)
+        if (self.config.NN_DEBUG_SHAPES):
+            print (X.shape, Y.shape, X, X[0][0].dtype)
+        return X,X_normalize_state, x_mapping_state, Y, Y_normalize_state
 
-        if (self.config.NN_ZERO_MEAN_NORMALIZE == True):
-            normalized = (data - mean) / (stdn + 0.00001)
+class cauverians():
+    def __init__(self, in_config, in_utils):
+        np.seterr(all='raise')
+        self.g_curr_epochs = 0
+        self.config = in_config
+        self.neighborhood_vals = {}
+        self.g_contiguous_high_acc_epochs = 0
+        self.g_highest_acc_state = {"acc": 0.0, "epoch": 1}
+        self.nn_architecture = None
+        self.params_values = None
+        self.utils = in_utils
+        print ("Initialised cauverians")
+        return
+    def make_network_arch(self, input_dim):
+        if (input_dim % 2):
+            print ("WARN: Number of features not multiple, ", input_dim)
+        nn = []
+        # set network configuration
+        if self.config.NN_RUN_MODE == "line":
+            nn.append({"layername": "in", "input_dim": input_dim, \
+                "output_dim": 1, "activation": "identity"})
         else:
-            normalized = (data - minimum_arr) / (maximum_arr - minimum_arr + 0.0001)
+            final_activation = "relu"
+            if self.config.NN_TYPE == "classifier":
+                final_activation = "sigmoid"
 
-        return normalized.reshape(data.shape), normalize_state
+            start_dim = input_dim*self.config.NN_INPUT_TO_HIDDEN_MULTIPLIER
+            nn.append({"layername": "input", "input_dim": input_dim, \
+                    "output_dim": int(start_dim), "activation": "relu"})
+            if (self.config.NN_SHAPE == "wide"):
+                for id in range(1000):
+                    if (start_dim <= 60): break
+                    div_factor = 2
+                    nn.append({"layername": "hidden"+str(id+1), "input_dim": int(start_dim), \
+                            "output_dim": int(start_dim/div_factor), "activation": "relu"})
+                    start_dim = start_dim / div_factor
+                nn.append({"layername": "output", "input_dim": int(start_dim), "output_dim": 1, \
+                        "activation": final_activation})
+            elif (self.config.NN_SHAPE == "long"): # long (from left to right)
+                for id in range(4):
+                    nn.append({"layername": "hidden-wide"+str(id+1), "input_dim": int(start_dim), \
+                            "output_dim": int(start_dim), "activation": "relu"})
+                nn.append({"layername": "output", "input_dim": int(start_dim), "output_dim": 1, \
+                        "activation": final_activation})
+            else:
+                raise Exception("Unknown network_shape ", self.config.NN_SHAPE)
+
+        self.nn_architecture = nn
+        self.params_values = self.init_layers(2)
+        return nn
 
     def init_layers(self, seed = 99):
         # random seed initiation
@@ -545,20 +724,9 @@ class cauverians():
             if (True == stop or self.config.NN_DEBUG_EXIT_EPOCH_ONE == True):
                 print ("Breaking out of training, state = ", train_state)
                 break
-            if self.g_exit_signalled > 0:
+            if self.utils.get_exit_signal_count() > 0:
                 break
-        self.print_model()
+        self.utils.print_model(self.nn_architecture, self.params_values)
         return self.params_values
-
-    def save_params(self, filename):
-        pklfile = open(filename, 'wb')
-        pickle.dump(self.params_values, pklfile)
-        pklfile.close()
-        print ("Model output and Parameters saved")
-
-    def save_kaggle(self, predictions, filename):
-        Id = np.empty([2919-1461+1,1], dtype=int)
-        for x in range(2919-1461+1):
-            Id[x][0] = x + 1461
-        predictions = np.append(Id, predictions,1)
-        np.savetxt(filename,predictions, fmt="%d,%d", delimiter=",")
+    def get_params(self):
+        return self.params_values
