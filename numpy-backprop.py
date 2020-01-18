@@ -13,7 +13,7 @@
 import autograd.numpy as np
 import math, random, time
 import sys, signal
-from cauverians import cauverians, utils
+from cauverians import cauverians, utils, kaggle_housing
 
 class create_config():
     def __init__(self):
@@ -36,7 +36,7 @@ class create_config():
         self.NN_INPUT_TO_HIDDEN_MULTIPLIER = 1
         self.NN_NORMALIZE = False
         self.NN_ZERO_MEAN_NORMALIZE = False # True will make zero mean set(with +,- values) so will not work rmsle
-        self.NN_RUN_MODE = "line" #"kaggle_home" # separated_datapoints or kaggle_home
+        self.NN_RUN_MODE = "kaggle_home" # line or kaggle_home
         self.NN_SHAPE = "wide" # long, wide
         self.NN_DROPOUT = False
         self.NN_REGULARISATION = True
@@ -72,12 +72,13 @@ class create_config():
 config = create_config()
 cauvery_utils = utils(config)
 cauvery = cauverians(config, cauvery_utils)
+kaggler = kaggle_housing(config)
 if(config.NN_RUN_MODE == "kaggle_home"):
     X_mapping = []  # Same mapping to be used in train/test !!
     X_train,X_train_normalize_state, X_mapping, Y_train, Y_train_normalize_state = \
-        cauvery.read_housing_csv_2("kaggle-housing-price/train.csv", X_mapping, "SalePrice")
+        kaggler.read_housing_csv_2("kaggle-housing-price/train.csv", X_mapping, "SalePrice")
     X_test, X_test_normalize_state, X_mapping, Y_test, _ = \
-        cauvery.read_housing_csv_2("kaggle-housing-price/test.csv", X_mapping)
+        kaggler.read_housing_csv_2("kaggle-housing-price/test.csv", X_mapping)
 else:
     X_train, X_train_normalize_state, _, Y_train, Y_train_normalize_state = cauvery_utils.generate_line()
     X_test, X_test_normalize_state, _, Y_test, Y_test_normalize_state = cauvery_utils.generate_line()
@@ -100,22 +101,22 @@ if config.NN_DEBUG_EXIT_EPOCH_ONE is True:
 if (config.NN_RUN_MODE == "line"):
     acc_test = cauvery.get_accuracy_value(Y_test_hat, Y_test)
     if config.NN_NORMALIZE:
-        Y_test_hat_denormalized = cauvery.denormalize0(Y_test_hat,
+        Y_test_hat_denormalized = cauvery_utils.denormalize0(Y_test_hat,
                     Y_train_normalize_state)
-        Y_test_denormalized = cauvery.denormalize0(Y_test,
+        Y_test_denormalized = cauvery_utils.denormalize0(Y_test,
                     Y_train_normalize_state)
         print (params_values, "y_test_hat=",Y_test_hat, "y_test=",Y_test_denormalized)
     else:
         print (params_values, "y_test_hat=",Y_test_hat, "y_test=",Y_test)
     print("Numpy test accuracy: {:.2f}".format(acc_test))
 else:
-    Y_test_hat_denormalized = cauvery.denormalize0(Y_test_hat,
+    Y_test_hat_denormalized = cauvery_utils.denormalize0(Y_test_hat,
                     Y_train_normalize_state)
     # Take anti-log of saleprice to get actuals, if log of price used for training
     if config.NN_LOG_TARGET is True:
         Y_test_hat_denormalized = np.exp(Y_test_hat_denormalized)
     #print (Y_test_hat_denormalized)
     timestr = str(time.time())
-    cauvery.save_kaggle(Y_test_hat_denormalized, "submission-"+ timestr +".csv")
-    cauvery.save_params("params-"+ timestr +".pkl")
+    kaggler.save_kaggle(Y_test_hat_denormalized, "submission-"+ timestr +".csv")
+    cauvery_utils.save_params(params_values, "params-"+ timestr +".pkl")
 print ("Exiting ...")
