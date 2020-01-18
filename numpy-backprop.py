@@ -36,7 +36,7 @@ class create_config():
         self.NN_INPUT_TO_HIDDEN_MULTIPLIER = 1
         self.NN_NORMALIZE = False
         self.NN_ZERO_MEAN_NORMALIZE = False # True will make zero mean set(with +,- values) so will not work rmsle
-        self.NN_RUN_MODE = "kaggle_home" # line or kaggle_home
+        self.NN_RUN_MODE = "line" # line or kaggle_home
         self.NN_SHAPE = "wide" # long, wide
         self.NN_DROPOUT = False
         self.NN_REGULARISATION = True
