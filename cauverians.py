@@ -17,7 +17,7 @@ class utils():
         signal.signal(signal.SIGINT, self.signal_handler)
 
     def signal_handler(self, sig, frame):
-        print('Setting exit flag...')
+        print('Setting exit flag due to signal...')
         self.g_exit_signalled = self.g_exit_signalled + 1
         if self.g_exit_signalled > 5:
             print ("Exiting due to signal")
@@ -52,6 +52,8 @@ class utils():
 
 
     def denormalize0(self, data, normalize_state):
+        if not self.config.NN_NORMALIZE:
+            return data
         mean = normalize_state["mean"]
         var = normalize_state["var"]
         minimum = normalize_state["min"]
@@ -81,9 +83,9 @@ class utils():
 
         return normalized.reshape(data.shape), normalize_state
 
-    def save_params(self, filename):
+    def save_params(self, params, filename):
         pklfile = open(filename, 'wb')
-        pickle.dump(self.params_values, pklfile)
+        pickle.dump(params, pklfile)
         pklfile.close()
         print ("Model output and Parameters saved")
 
