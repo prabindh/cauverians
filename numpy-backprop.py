@@ -26,17 +26,17 @@ class create_config():
         self.NN_EPOCHS = 10000
         # ratio between training and test sets
         self.NN_TEST_SIZE = 0.1
-        self.NN_LEARNING_RATE = 0.0005
-        self.NN_PARAMS_NPY_FILE= None   # None or .pkl file
+        self.NN_LEARNING_RATE = 0.205
+        self.NN_PARAMS_NPY_FILE = None   # None or .pkl file
         self.NN_LOG_TARGET = False
         self.NN_MULTI_ENCODE_TEXT_VARS = False
-        self.NN_APPLY_DATA_SCIENCE = True
-        self.NN_SHUFFLE_ROWS_EPOCH = False
+        self.NN_APPLY_DATA_SCIENCE = False
+        self.NN_SHUFFLE_ROWS_EPOCH = True
         self.NN_BATCH_ROWS_EPOCH = False
-        self.NN_INPUT_TO_HIDDEN_MULTIPLIER = 1
-        self.NN_NORMALIZE = False
+        self.NN_INPUT_TO_HIDDEN_MULTIPLIER = 3
+        self.NN_NORMALIZE = True
         self.NN_ZERO_MEAN_NORMALIZE = False # True will make zero mean set(with +,- values) so will not work rmsle
-        self.NN_RUN_MODE = "line" # line or kaggle_home
+        self.NN_RUN_MODE = "kaggle_home" # line or kaggle_home
         self.NN_SHAPE = "wide" # long, wide
         self.NN_DROPOUT = False
         self.NN_REGULARISATION = True
@@ -59,8 +59,8 @@ class create_config():
         elif self.NN_TYPE == "regressor":
             if self.NN_RUN_MODE == "kaggle_home":
                 # "root_mean_sq_log_error" to be used, if log.Y is not taken reading from CSV. Else "root_mean_sq_error"
-                self.NN_ARCHITECTURE_LOSS_TYPE = "root_mean_sq_log_error"
-                # self.NN_ARCHITECTURE_LOSS_TYPE = "root_mean_sq_error"
+                #self.NN_ARCHITECTURE_LOSS_TYPE = "mean_sq_error"
+                self.NN_ARCHITECTURE_LOSS_TYPE = "root_mean_sq_error"
             else:
                 self.NN_ARCHITECTURE_LOSS_TYPE = "mean_sq_error"
         if self.NN_DEBUG_SHAPES:
@@ -72,13 +72,13 @@ class create_config():
 config = create_config()
 cauvery_utils = utils(config)
 cauvery = cauverians(config, cauvery_utils)
-kaggler = kaggle_housing(config)
+kaggler = kaggle_housing(config, cauvery_utils)
 if(config.NN_RUN_MODE == "kaggle_home"):
-    X_mapping = []  # Same mapping to be used in train/test !!
+    X_mapping = {}  # Same mapping to be used in train/test !!
     X_train,X_train_normalize_state, X_mapping, Y_train, Y_train_normalize_state = \
-        kaggler.read_housing_csv_2("kaggle-housing-price/train.csv", X_mapping, "SalePrice")
+        kaggler.read_housing_csv("kaggle-housing-price/train2-outliers-heating-garagecars-poolqc-miscfeat-removed.csv", X_mapping, "SalePrice")
     X_test, X_test_normalize_state, X_mapping, Y_test, _ = \
-        kaggler.read_housing_csv_2("kaggle-housing-price/test.csv", X_mapping)
+        kaggler.read_housing_csv("kaggle-housing-price/test2-heating-garagecars-poolqc-miscfeat-removed.csv", X_mapping)
 else:
     X_train, X_train_normalize_state, _, Y_train, Y_train_normalize_state = cauvery_utils.generate_line()
     X_test, X_test_normalize_state, _, Y_test, Y_test_normalize_state = cauvery_utils.generate_line()
