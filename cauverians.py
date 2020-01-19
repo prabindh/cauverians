@@ -90,10 +90,11 @@ class utils():
         print ("Model output and Parameters saved")
 
 class kaggle_housing():
-    def __init__(self, in_config):
+    def __init__(self, in_config, in_utils):
         np.seterr(all='raise')
         self.g_curr_epochs = 0
         self.config = in_config
+        self.utils = in_utils
     def save_kaggle(self, predictions, filename):
         Id = np.empty([2919-1461+1,1], dtype=int)
         for x in range(2919-1461+1):
@@ -296,11 +297,74 @@ class kaggle_housing():
         Y_normalize_state = X_normalize_state = None
         if (self.config.NN_NORMALIZE):
             if (target_name is not None):
-                Y, Y_normalize_state = self.normalize0(Y, axis=0)
-            X, X_normalize_state = self.normalize0(X, axis=0)
+                Y, Y_normalize_state = self.utils.normalize0(Y, axis=0)
+            X, X_normalize_state = self.utils.normalize0(X, axis=0)
         if (self.config.NN_DEBUG_SHAPES):
             print (X.shape, Y.shape, X, X[0][0].dtype)
         return X,X_normalize_state, x_mapping_state, Y, Y_normalize_state
+
+    def read_housing_csv(self, file_name, mapping_state, target_name=None):
+        data = np.genfromtxt(file_name,
+                delimiter=',', dtype='unicode', skip_header=1)
+        if (self.config.NN_DEBUG_SHAPES):
+            print (data.shape)
+        if (target_name is None):
+            skip_cols = 1
+        else:
+            skip_cols = 2
+        # clean up feature-wise
+        map_id = 1.0  # Dont make a feature irrelevant by making it 0
+        # Map known mappings
+        mapping_state["NA"] = 0.0
+        mapping_state["No"] = 0.0
+        mapping_state["N"] = 0.0
+        mapping_state["Unf"] = 0.0
+        mapping_state["None"] = 0.0
+        mapping_state["Po"] = 0.0 # Poor
+        mapping_state["Y"] = map_id
+        map_id = map_id + 1
+        mapping_state["Fa"] = map_id
+        map_id = map_id + 1
+        mapping_state["TA"] = map_id
+        map_id = map_id + 1
+        mapping_state["Gd"] = map_id
+        map_id = map_id + 1
+        mapping_state["Ex"] = map_id
+        map_id = map_id + 1
+
+        # Get (samplesize x features per sample)
+        X = np.empty((data.shape[0],data.shape[1]-skip_cols)) # Dont need Id and Price columns
+        # Perform column-wise, so feature-wise mappings are similar, else they will be random
+        for col in range(data.shape[1]-skip_cols):
+            for row in range(data.shape[0]):
+                try:
+                    X[row][col] = data[row][col+1].astype(float)
+                except:
+                    if (data[row][col+1] in mapping_state):
+                        X[row][col] = mapping_state[data[row][col+1]]
+                    else:
+                        mapping_state[data[row][col+1]] = map_id
+                        X[row][col] = map_id
+                        map_id = map_id + 1.0
+        # Get groundtruths
+        Y = np.empty((data.shape[0],1))
+        if (target_name is not None):
+            for row in range(data.shape[0]):
+                col = data.shape[1]-1
+                try:
+                    # Take log of saleprice to match the loss calculations
+                    Y[row][0] = np.log(data[row][col].astype(float))
+                except:
+                    raise Exception ("Ground truth should be float")
+        # Normalize
+        Y_normalize_state = X_normalize_state = None
+        if (self.config.NN_NORMALIZE):
+            if (target_name is not None):
+                Y, Y_normalize_state = self.utils.normalize0(Y, axis=0)
+            X, X_normalize_state = self.utils.normalize0(X, axis=0)
+        if (self.config.NN_DEBUG_SHAPES):
+            print (X.shape, Y.shape, X, X[0][0].dtype)
+        return X,X_normalize_state, mapping_state, Y, Y_normalize_state
 
 class cauverians():
     def __init__(self, in_config, in_utils):
@@ -333,7 +397,7 @@ class cauverians():
                     "output_dim": int(start_dim), "activation": "relu"})
             if (self.config.NN_SHAPE == "wide"):
                 for id in range(1000):
-                    if (start_dim <= 60): break
+                    if (start_dim <= 40): break
                     div_factor = 2
                     nn.append({"layername": "hidden"+str(id+1), "input_dim": int(start_dim), \
                             "output_dim": int(start_dim/div_factor), "activation": "relu"})
@@ -375,7 +439,7 @@ class cauverians():
 
             # initiating the values of the W matrix
             # and vector b for subsequent layers
-            Wrand1 = np.random.randn(layer_input_size, layer_output_size)
+            Wrand1 = np.random.randn(layer_input_size, layer_output_size) * 0.1
 
             # Unused section
             """
@@ -390,8 +454,8 @@ class cauverians():
             """
             self.params_values['W' + str(layer_idx)] = Wrand1
             self.params_values['b' + str(layer_idx)] = np.zeros((1, layer_output_size))
-            mu, sigma = 0, 0.1
-            self.params_values['b' + str(layer_idx)] = np.random.normal(mu, sigma, (1, layer_output_size))
+            #mu, sigma = 0, 0.1
+            #self.params_values['b' + str(layer_idx)] = np.random.normal(mu, sigma, (1, layer_output_size))
 
         return self.params_values
 
@@ -409,7 +473,6 @@ class cauverians():
 
     def relu_backward(self, dA, Z):
         dZ = np.array(dA, copy = True)
-        dZ[Z > 0] = 1
         dZ[Z <= 0] = 0
         return dZ
     def leaky_relu(self, Z):
@@ -429,7 +492,6 @@ class cauverians():
         # A_curr[rand_val:rand_val][:] = 0.0 # For relu, place before activation
         input[:, [rand_val]] = 0.0  # Zero all rows of this col
         return input
-
 
     def evaluate_single_layer(self, A_prev, W_curr, b_curr, activation="relu"):
         # calculation of the input value for the activation function
@@ -540,7 +602,7 @@ class cauverians():
                 # Calculation of rmse
                 cost = self.evaluate_rmse(Y_hat, Y)
             else:
-                grad_rmse = grad(evaluate_rmse)
+                grad_rmse = grad(self.evaluate_rmse)
                 derivative_cost = -1 * grad_rmse(Y_hat, Y)
         else:
             raise Exception ("Error: Unknown cost method {}".format(method))
