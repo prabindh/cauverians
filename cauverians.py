@@ -353,7 +353,7 @@ class kaggle_housing():
                 col = data.shape[1]-1
                 try:
                     # Take log of saleprice to match the loss calculations
-                    Y[row][0] = np.log(data[row][col].astype(float))
+                    Y[row][0] = data[row][col].astype(float)
                 except:
                     raise Exception ("Ground truth should be float")
         # Normalize
@@ -397,7 +397,7 @@ class cauverians():
                     "output_dim": int(start_dim), "activation": "relu"})
             if (self.config.NN_SHAPE == "wide"):
                 for id in range(1000):
-                    if (start_dim <= 40): break
+                    if (start_dim <= 60): break
                     div_factor = 2
                     nn.append({"layername": "hidden"+str(id+1), "input_dim": int(start_dim), \
                             "output_dim": int(start_dim/div_factor), "activation": "relu"})
@@ -587,9 +587,9 @@ class cauverians():
                 cost = self.evaluate_mse(loss)
             else:
                 # Calculation of non-normalised first derivative
-                #grad_mse = grad(self.evaluate_mse)
-                #derivative_cost = (-1) * grad_mse(loss)
-                derivative_cost = self.evaluate_grad_mse_y_hat(loss)
+                grad_mse = grad(self.evaluate_mse)
+                derivative_cost = (-1) * grad_mse(loss)
+                # derivative_cost = self.evaluate_grad_mse_y_hat(loss)
         elif (method is "root_mean_sq_log_error"):
             if (derivative is None):
                 # Calculation of rmsle
