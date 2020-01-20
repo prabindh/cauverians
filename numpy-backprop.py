@@ -23,7 +23,7 @@ class create_config():
         self.ACCURACY_CUTOFF = 0.017
         # # number of samples in the test data set
         self.N_SAMPLES = 100
-        self.NN_EPOCHS = 10000
+        self.NN_EPOCHS = 300000
         # ratio between training and test sets
         self.NN_TEST_SIZE = 0.1
         self.NN_LEARNING_RATE = 0.205
@@ -33,7 +33,7 @@ class create_config():
         self.NN_APPLY_DATA_SCIENCE = False
         self.NN_SHUFFLE_ROWS_EPOCH = True
         self.NN_BATCH_ROWS_EPOCH = False
-        self.NN_INPUT_TO_HIDDEN_MULTIPLIER = 3
+        self.NN_INPUT_TO_HIDDEN_MULTIPLIER = 4
         self.NN_NORMALIZE = True
         self.NN_ZERO_MEAN_NORMALIZE = False # True will make zero mean set(with +,- values) so will not work rmsle
         self.NN_RUN_MODE = "kaggle_home" # line or kaggle_home
@@ -59,8 +59,9 @@ class create_config():
         elif self.NN_TYPE == "regressor":
             if self.NN_RUN_MODE == "kaggle_home":
                 # "root_mean_sq_log_error" to be used, if log.Y is not taken reading from CSV. Else "root_mean_sq_error"
-                #self.NN_ARCHITECTURE_LOSS_TYPE = "mean_sq_error"
-                self.NN_ARCHITECTURE_LOSS_TYPE = "root_mean_sq_error"
+                # self.NN_ARCHITECTURE_LOSS_TYPE = "mean_sq_error"
+                #self.NN_ARCHITECTURE_LOSS_TYPE = "root_mean_sq_error"
+                self.NN_ARCHITECTURE_LOSS_TYPE = "root_mean_sq_log_error"
             else:
                 self.NN_ARCHITECTURE_LOSS_TYPE = "mean_sq_error"
         if self.NN_DEBUG_SHAPES:
