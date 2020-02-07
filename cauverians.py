@@ -552,12 +552,16 @@ class cauverians():
     def evaluate_rmsle(self, Y_hat, Y):
         val = np.log1p(Y) - np.log1p(Y_hat)
         cost = - np.sqrt(np.mean(val**2))
-        if self.config.NN_REGULARISATION:
-            cost = cost #todo
         return cost
     def evaluate_rmse(self, Y_hat, Y):
-        rmse = - np.sqrt(((Y_hat - Y) ** 2).mean())
-        return rmse
+        cost = - np.sqrt(((Y_hat - Y) ** 2).mean())
+        if self.config.NN_REGULARISATION:
+            regcost = 0
+            for idx, layer in enumerate(self.nn_architecture):
+                regcost = regcost + np.reduce_sum(self.params_values['W' + str(idx + 1)])
+            regcost = regcost * self.config.NN_REGULARISATION_ALPHA
+            cost = cost + regcost
+        return cost
     def evaluate_mse(self, loss):
         mse = - np.mean(loss ** 2) / 2
         return mse
