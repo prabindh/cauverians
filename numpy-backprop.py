@@ -33,13 +33,14 @@ class create_config():
         self.NN_APPLY_DATA_SCIENCE = False
         self.NN_SHUFFLE_ROWS_EPOCH = True
         self.NN_BATCH_ROWS_EPOCH = False
-        self.NN_INPUT_TO_HIDDEN_MULTIPLIER = 4
+        self.NN_INPUT_TO_HIDDEN_MULTIPLIER = 1
         self.NN_NORMALIZE = True
         self.NN_ZERO_MEAN_NORMALIZE = False # True will make zero mean set(with +,- values) so will not work rmsle
         self.NN_RUN_MODE = "kaggle_home" # line or kaggle_home
-        self.NN_SHAPE = "wide" # long, wide
+        self.NN_SHAPE = "long" # long, wide
         self.NN_DROPOUT = False
         self.NN_REGULARISATION = True
+        self.NN_REGULARISATION_ALPHA = 0.01
 
         # Debug configs
         self.NN_DEBUG_PRINT_EPOCH_COUNT = 100
@@ -93,10 +94,6 @@ params_values = cauvery.train_model(X_train, Y_train)
 
 # Prediction
 Y_test_hat, _ = cauvery.evaluate_model(X_test)
-
-if config.NN_DEBUG_EXIT_EPOCH_ONE is True:
-    print ("Exiting due to config.NN_DEBUG_EXIT_EPOCH_ONE...")
-    sys.exit(-1)
 
 # Accuracy achieved on the test set
 if (config.NN_RUN_MODE == "line"):
