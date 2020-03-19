@@ -493,13 +493,13 @@ class cauverians():
         input[:, [rand_val]] = 0.0  # Zero all rows of this col
         return input
 
-    def evaluate_single_layer(self, A_prev, W_curr, b_curr, activation="relu"):
+    def evaluate_single_layer(self, A_n_1, W_n, b_n, activation="relu"):
         # calculation of the input value for the activation function
         #  Z = A*W + b
         #    Then Activation is applied A = activate(Z), to get Input to next layer
 
 
-        Z_curr = np.dot(A_prev, W_curr) + b_curr
+        Z_n = np.dot(A_n_1, W_n) + b_n
 
         # selection of activation function
         if activation is "relu":
@@ -513,40 +513,40 @@ class cauverians():
         else:
             raise Exception('Non-supported activation function')
 
-        return activation_func(Z_curr), Z_curr
+        return activation_func(Z_n), Z_n
 
     def evaluate_model(self, X):
         memory = {}
-        A_curr = X
+        A_n = X
         dropout = self.config.NN_DROPOUT
 
         if dropout == True:
-            A_curr = make_dropout(A_curr, 0.1)
+            A_n = make_dropout(A_n, 0.1)
 
         # iteration over network layers
         for idx, layer in enumerate(self.nn_architecture):
             # we number network layers from 1
             layer_idx = idx + 1
             # transfer the activation from the previous iteration
-            A_prev = A_curr
+            A_n_1 = A_n
 
             # extraction of the activation function for the current layer
-            activ_function_curr = layer["activation"]
+            activ_function_n = layer["activation"]
             # extraction of W for the current layer
-            W_curr = self.params_values["W" + str(layer_idx)]
+            W_n = self.params_values["W" + str(layer_idx)]
             # extraction of b for the current layer
-            b_curr = self.params_values["b" + str(layer_idx)]
+            b_n = self.params_values["b" + str(layer_idx)]
             # calculation of activation for the current layer
-            A_curr, Z_curr = self.evaluate_single_layer(A_prev, W_curr, b_curr, activ_function_curr)
+            A_n, Z_n = self.evaluate_single_layer(A_n_1, W_n, b_n, activ_function_n)
 
             if (self.config.NN_DEBUG_SHAPES):
-                print ("Forward: layer / A_curr/Z_curr shapes:", layer_idx, A_curr.shape, Z_curr.shape)
+                print ("Forward: layer / A_n/Z_n shapes:", layer_idx, A_n.shape, Z_n.shape)
 
             # saving calculated values in the memory
-            memory["A" + str(idx)] = A_prev
-            memory["Z" + str(layer_idx)] = Z_curr
+            memory["A" + str(idx)] = A_n_1
+            memory["Z" + str(layer_idx)] = Z_n
 
-        return A_curr, memory
+        return A_n, memory
 
     # rmsle
     def evaluate_rmsle(self, Y_hat, Y):
@@ -651,16 +651,19 @@ class cauverians():
         else:
             if self.config.NN_RUN_MODE == "line":
                 loss = Y_hat - Y
-                acc = self.evaluate_mse(loss)
+                error = self.evaluate_mse(loss)
             else:
-                acc = self.evaluate_rmsle(Y_hat, Y)
+                error = self.evaluate_rmsle(Y_hat, Y)
+            acc = 1 - error
             # If already kaggle Y is in log, so just use rmse
             # acc = evaluate_rmse(Y_hat, Y)
         return acc
 
-    def single_layer_backward_propagation(self, dA_curr, W_curr, b_curr, Z_curr, A_prev, activation="relu"):
+
+## dLOSS/dWk = error. (Wk * ...* Wn-1) * A input --> Check this
+    def single_layer_backward_propagation(self, dA_n, W_n, b_n, Z_n, A_n_1, activation="relu"):
         # number of examples
-        m = A_prev.shape[0]
+        m = A_n_1.shape[0]
 
         # selection of activation function
         if activation is "relu":
@@ -675,19 +678,20 @@ class cauverians():
             raise Exception('Non-supported activation function')
 
         # calculation of the activation function derivative
-        dZ_curr = backward_activation_func(dA_curr, Z_curr)
+        # dz = dA. deriv of g(Z)
+        dZ_n = backward_activation_func(dA_n, Z_n)
 
-        # derivative of the matrix W
-        dW_curr = np.dot(dZ_curr.T, A_prev) / m
-        # derivative of the vector b
-        db_curr = np.sum(dZ_curr, keepdims=True) / m
+        # derivative wrt W
+        dW_n = np.dot(dZ_n.T, A_n_1) / m
+        # derivative wrt b
+        db_n = np.sum(dZ_n, keepdims=True) / m
         if (self.config.NN_DEBUG_SHAPES):
-            print ("Back: W_curr/dW_curr, b_curr/db_curr shape:", W_curr.shape, \
-                    dW_curr.shape, b_curr.shape, db_curr.shape)
-        # derivative of the matrix A_prev
-        dA_prev = np.dot(dZ_curr, W_curr.T)
+            print ("Back: W_n/dW_n, b_n/db_n shape:", W_n.shape, \
+                    dW_n.shape, b_n.shape, db_n.shape)
+        # derivative wrt A_n_1
+        dA_n_1 = np.dot(dZ_n, W_n.T)
 
-        return dA_prev, dW_curr, db_curr
+        return dA_n_1, dW_n, db_n
 
     def full_backward_propagation(self, X, Y_hat, Y, memory):
         grads_values = {}
@@ -695,34 +699,36 @@ class cauverians():
         # number of examples
         m = Y.shape[0]
         # initiation of gradient descent algorithm
-        _, dA_prev = self.evaluate_cost_value(X, Y_hat, Y, self.config.NN_ARCHITECTURE_LOSS_TYPE, "first_derivative")
+        _, dA_n_1 = self.evaluate_cost_value(X, Y_hat, Y, self.config.NN_ARCHITECTURE_LOSS_TYPE, "first_derivative")
 
         if (self.config.NN_DEBUG_GRADIENTS):
-            print ("dA_prev = ", dA_prev, "Y_hat0,Y=", Y_hat[0], Y[0])
+            print ("dA_n_1 = ", dA_n_1, "Y_hat0,Y=", Y_hat[0], Y[0])
 
-        for layer_idx_prev, layer in reversed(list(enumerate(self.nn_architecture))):
-            # we number network layers from 1
-            layer_idx_curr = layer_idx_prev + 1
+        # Start from last layer onwards, move towards first layer
+        # But - curr and prev in this loop refer to forward order (n, n-1), not reverse order...
+        for layer_idx_n_1, layer in reversed(list(enumerate(self.nn_architecture))):
+            # numbers start from 1
+            layer_idx_n = layer_idx_n_1 + 1
             # extraction of the activation function for the current layer
-            activ_function_curr = layer["activation"]
+            activ_function_n = layer["activation"]
 
-            dA_curr = dA_prev
+            dA_n = dA_n_1
 
-            A_prev = memory["A" + str(layer_idx_prev)]
-            Z_curr = memory["Z" + str(layer_idx_curr)]
+            A_n_1 = memory["A" + str(layer_idx_n_1)]
+            Z_n = memory["Z" + str(layer_idx_n)]
 
-            W_curr = self.params_values["W" + str(layer_idx_curr)]
-            b_curr = self.params_values["b" + str(layer_idx_curr)]
+            W_n = self.params_values["W" + str(layer_idx_n)]
+            b_n = self.params_values["b" + str(layer_idx_n)]
 
             if (self.config.NN_DEBUG_SHAPES):
-                print ("Back: shape dA/W/b/Z/A_prev = ",dA_curr.shape, W_curr.shape, \
-                            b_curr.shape, Z_curr.shape, A_prev.shape)
+                print ("Back: shape dA/W/b/Z/A_n_1 = ",dA_n.shape, W_n.shape, \
+                            b_n.shape, Z_n.shape, A_n_1.shape)
 
-            dA_prev, dW_curr, db_curr = self.single_layer_backward_propagation(
-                dA_curr, W_curr, b_curr, Z_curr, A_prev, activ_function_curr)
+            dA_n_1, dW_n, db_n = self.single_layer_backward_propagation(
+                dA_n, W_n, b_n, Z_n, A_n_1, activ_function_n)
 
-            grads_values["dW" + str(layer_idx_curr)] = dW_curr
-            grads_values["db" + str(layer_idx_curr)] = db_curr
+            grads_values["dW" + str(layer_idx_n)] = dW_n
+            grads_values["db" + str(layer_idx_n)] = db_n
         return grads_values
 
     def update_model(self, grads_values, learning_rate):
